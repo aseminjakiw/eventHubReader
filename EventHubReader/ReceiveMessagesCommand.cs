@@ -1,7 +1,5 @@
 ﻿using System;
 using System.Linq;
-using System.Reactive;
-using System.Reactive.Subjects;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,6 +12,8 @@ namespace EventHubReader
 {
     public class ReceiveMessagesCommand : AsyncCommand<ReceiveMessagesSettings>
     {
+        private bool printMessages = true;
+
         public override async Task<int> ExecuteAsync(CommandContext context, ReceiveMessagesSettings settings)
         {
             AnsiConsole.Clear();
@@ -21,7 +21,7 @@ namespace EventHubReader
             InitSettings(settings);
 
             AnsiConsole.WriteLine();
-            AnsiConsole.MarkupLine("Press [green]SPACE[/] to trigger a message or [orange3]ESC[/] to exit.");
+            AnsiConsole.MarkupLine("Press [green]SPACE[/] to pause / resume printing of messages or [orange3]ESC[/] to exit.");
             AnsiConsole.WriteLine();
 
             await RunCommand(settings);
@@ -60,49 +60,60 @@ namespace EventHubReader
 
             table.AddRow("Event Hub namespace", connectionStringProperties.FullyQualifiedNamespace);
             table.AddRow("Event Hub", connectionStringProperties.EventHubName);
-            table.AddRow("Endpoint", connectionStringProperties.Endpoint.ToString());
+            table.AddRow("consumer group", settings.ConsumerGroup);
 
             table.Border(TableBorder.Rounded);
 
             AnsiConsole.Render(table);
         }
 
-        private async Task MonitorUserInput(CancellationTokenSource cts, IObserver<Unit> manualTrigger)
+        private async Task MonitorUserInput(CancellationTokenSource cts)
         {
             while (true)
             {
                 while (Console.KeyAvailable)
                 {
                     var keyInfo = Console.ReadKey(true);
-                    if (keyInfo.Key is ConsoleKey.Escape)
+                    if (keyInfo.Key is ConsoleKey.Escape || keyInfo.Modifiers is ConsoleModifiers.Control && keyInfo.Key is ConsoleKey.C)
                     {
                         cts.Cancel();
-                        manualTrigger.OnCompleted();
                         return;
                     }
 
                     if (keyInfo.Key is ConsoleKey.Spacebar)
-                        manualTrigger.OnNext(Unit.Default);
+                        printMessages = !printMessages;
                 }
 
                 await Task.Delay(200);
             }
         }
 
-        private static async Task ReceiveMessages(ReceiveMessagesSettings settings, CancellationToken cancellationToken)
+        private async Task ReceiveMessages(ReceiveMessagesSettings settings, CancellationToken cancellationToken)
         {
             await using var consumer = new EventHubConsumerClient(settings.ConsumerGroup, settings.ConnectionString);
-            await foreach (var receivedEvent in consumer.ReadEventsAsync(cancellationToken))
+            await foreach (var receivedEvent in consumer.ReadEventsAsync(false, null, cancellationToken))
             {
-                var message = Encoding.UTF8.GetString(receivedEvent.Data.EventBody);
-                AnsiConsole.WriteLine(message);
+                try
+                {
+                    if (!printMessages)
+                        continue;
+
+                    var timeStamp = $"[gray]{DateTime.Now:O}:[/] ";
+                    AnsiConsole.MarkupLine(timeStamp);
+                    
+                    var message = Encoding.UTF8.GetString(receivedEvent.Data.EventBody);
+                    AnsiConsole.WriteLine(message);
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(e);
+                }
             }
         }
 
         private async Task RunCommand(ReceiveMessagesSettings settings)
         {
             using var cts = new CancellationTokenSource();
-            using var manualTriggerSubject = new Subject<Unit>();
 
             var sendMessagesTask =
                 AnsiConsole.Status()
@@ -112,7 +123,7 @@ namespace EventHubReader
 
             try
             {
-                await MonitorUserInput(cts, manualTriggerSubject);
+                await MonitorUserInput(cts);
                 await sendMessagesTask;
             }
             catch (OperationCanceledException)
