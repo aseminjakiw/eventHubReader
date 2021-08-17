@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Linq;
 using System.Reactive;
 using System.Reactive.Subjects;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Azure.Messaging.EventHubs;
@@ -28,7 +30,17 @@ namespace EventHubReader
 
             return 0;
         }
-        
+
+        private static void Goodbye()
+        {
+            AnsiConsole.WriteLine();
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine("   " + Emoji.Known.GrowingHeart + "  [orange3]THANK YOU FOR PARTICIPATING IN THIS ENRICHMENT CENTER ACTIVITY[/]  " +
+                                   Emoji.Known.BirthdayCake);
+            AnsiConsole.WriteLine();
+            AnsiConsole.WriteLine();
+        }
+
         private static void InitSettings(ReceiveMessagesSettings settings)
         {
             AnsiConsole.WriteLine();
@@ -54,45 +66,7 @@ namespace EventHubReader
 
             AnsiConsole.Render(table);
         }
-        
-        private static EventHubsConnectionStringProperties TryParseConnectionString(string connectionString)
-        {
-            try
-            {
-                return EventHubsConnectionStringProperties.Parse(connectionString);
-            }
-            catch (Exception e)
-            {
-                throw new Exception("Failed to parse provided connection string: " + e.Message, e);
-            }
-        }
-        
-        private static void Goodbye()
-        {
-            AnsiConsole.WriteLine();
-            AnsiConsole.WriteLine();
-            AnsiConsole.MarkupLine("   " + Emoji.Known.GrowingHeart + "  [orange3]THANK YOU FOR PARTICIPATING IN THIS ENRICHMENT CENTER ACTIVITY[/]  " +
-                                   Emoji.Known.BirthdayCake);
-            AnsiConsole.WriteLine();
-            AnsiConsole.WriteLine();
-        }
 
-        private async Task RunCommand(ReceiveMessagesSettings settings)
-        {
-            using var cts = new CancellationTokenSource();
-            using var manualTriggerSubject = new Subject<Unit>();
-            
-            try
-            {
-                await MonitorUserInput(cts, manualTriggerSubject);
-                await ReceiveMessages(settings, cts.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                // Ignore
-            }
-        }
-        
         private async Task MonitorUserInput(CancellationTokenSource cts, IObserver<Unit> manualTrigger)
         {
             while (true)
@@ -117,18 +91,45 @@ namespace EventHubReader
 
         private static async Task ReceiveMessages(ReceiveMessagesSettings settings, CancellationToken cancellationToken)
         {
-            await using (var consumer = new EventHubConsumerClient(settings.ConsumerGroup, settings.ConnectionString))
+            await using var consumer = new EventHubConsumerClient(settings.ConsumerGroup, settings.ConnectionString);
+            await foreach (var receivedEvent in consumer.ReadEventsAsync(cancellationToken))
             {
-                using var cancellationSource = new CancellationTokenSource();
-                cancellationSource.CancelAfter(TimeSpan.FromSeconds(45));
+                var message = Encoding.UTF8.GetString(receivedEvent.Data.EventBody);
+                AnsiConsole.WriteLine(message);
+            }
+        }
 
-                await foreach (PartitionEvent receivedEvent in consumer.ReadEventsAsync(cancellationSource.Token))
-                {
-                    // At this point, the loop will wait for events to be available in the Event Hub.  When an event
-                    // is available, the loop will iterate with the event that was received.  Because we did not
-                    // specify a maximum wait time, the loop will wait forever unless cancellation is requested using
-                    // the cancellation token.
-                }
+        private async Task RunCommand(ReceiveMessagesSettings settings)
+        {
+            using var cts = new CancellationTokenSource();
+            using var manualTriggerSubject = new Subject<Unit>();
+
+            var sendMessagesTask =
+                AnsiConsole.Status()
+                    .Spinner(Spinner.Known.BouncingBar)
+                    .StartAsync("Running...", _ => ReceiveMessages(settings, cts.Token));
+
+
+            try
+            {
+                await MonitorUserInput(cts, manualTriggerSubject);
+                await sendMessagesTask;
+            }
+            catch (OperationCanceledException)
+            {
+                // Ignore
+            }
+        }
+
+        private static EventHubsConnectionStringProperties TryParseConnectionString(string connectionString)
+        {
+            try
+            {
+                return EventHubsConnectionStringProperties.Parse(connectionString);
+            }
+            catch (Exception e)
+            {
+                throw new Exception("Failed to parse provided connection string: " + e.Message, e);
             }
         }
     }
