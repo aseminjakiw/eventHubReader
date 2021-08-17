@@ -13,6 +13,7 @@ namespace EventHubReader
     public class ReceiveMessagesCommand : AsyncCommand<ReceiveMessagesSettings>
     {
         private bool printMessages = true;
+        private StatusContext? statusContext;
 
         public override async Task<int> ExecuteAsync(CommandContext context, ReceiveMessagesSettings settings)
         {
@@ -81,7 +82,7 @@ namespace EventHubReader
                     }
 
                     if (keyInfo.Key is ConsoleKey.Spacebar)
-                        printMessages = !printMessages;
+                        ToggleMessagePrint();
                 }
 
                 await Task.Delay(200);
@@ -92,7 +93,6 @@ namespace EventHubReader
         {
             await using var consumer = new EventHubConsumerClient(settings.ConsumerGroup, settings.ConnectionString);
             await foreach (var receivedEvent in consumer.ReadEventsAsync(false, null, cancellationToken))
-            {
                 try
                 {
                     if (!printMessages)
@@ -100,7 +100,7 @@ namespace EventHubReader
 
                     var timeStamp = $"[gray]{DateTime.Now:O}:[/] ";
                     AnsiConsole.MarkupLine(timeStamp);
-                    
+
                     var message = Encoding.UTF8.GetString(receivedEvent.Data.EventBody);
                     AnsiConsole.WriteLine(message);
                 }
@@ -108,17 +108,21 @@ namespace EventHubReader
                 {
                     Console.WriteLine(e);
                 }
-            }
         }
 
         private async Task RunCommand(ReceiveMessagesSettings settings)
         {
             using var cts = new CancellationTokenSource();
 
+
             var sendMessagesTask =
                 AnsiConsole.Status()
                     .Spinner(Spinner.Known.BouncingBar)
-                    .StartAsync("Running...", _ => ReceiveMessages(settings, cts.Token));
+                    .StartAsync("Running...", context =>
+                    {
+                        statusContext = context;
+                        return ReceiveMessages(settings, cts.Token);
+                    });
 
 
             try
@@ -129,6 +133,20 @@ namespace EventHubReader
             catch (OperationCanceledException)
             {
                 // Ignore
+            }
+        }
+
+        private void ToggleMessagePrint()
+        {
+            if (printMessages)
+            {
+                printMessages = false;
+                if (statusContext != null) statusContext.Status = "Paused";
+            }
+            else
+            {
+                printMessages = true;
+                if (statusContext != null) statusContext.Status = "Running...";
             }
         }
 
