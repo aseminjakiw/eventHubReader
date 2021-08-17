@@ -63,6 +63,17 @@ namespace EventHubReader
             table.AddRow("Event Hub", connectionStringProperties.EventHubName);
             table.AddRow("consumer group", settings.ConsumerGroup);
 
+            foreach (var contains in settings.Contains)
+            {
+                table.AddRow("Message must contain", contains);
+            }
+
+            foreach (var notContains in settings.NotContains)
+            {
+                table.AddRow("Message must NOT contain", notContains);
+            }
+
+
             table.Border(TableBorder.Rounded);
 
             AnsiConsole.Render(table);
@@ -98,10 +109,24 @@ namespace EventHubReader
                     if (!printMessages)
                         continue;
 
+                    var message = Encoding.UTF8.GetString(receivedEvent.Data.EventBody);
+                    if (settings.NotContains
+                        .Select(x => message.Contains(x))
+                        .Any(x=> x == true))
+                    {
+                        continue;
+                    }
+
+                    if (settings.Contains
+                        .Select(x => message.Contains(x))
+                        .Any(x=> x == false))
+                    {
+                        continue;
+                    }
+
+
                     var timeStamp = $"[gray]{DateTime.Now:O}:[/] ";
                     AnsiConsole.MarkupLine(timeStamp);
-
-                    var message = Encoding.UTF8.GetString(receivedEvent.Data.EventBody);
                     AnsiConsole.WriteLine(message);
                 }
                 catch (Exception e)

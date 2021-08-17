@@ -8,13 +8,21 @@ namespace EventHubReader
 {
     public class ReceiveMessagesSettings : CommandSettings
     {
-        [Description("Azure Event Hub connection string as presented in the Azure portal. Must contain Event Hub name")]
+        [Description("Azure Event Hub connection string as presented in the Azure portal. Must contain Event Hub name.")]
         [CommandArgument(0, "[consumerGroup]")]
         public string? ConnectionString { get; set; }
 
         [Description("Consumer group of Event hub to read from.")]
-        [CommandOption("-c|--consumer-group")]
+        [CommandOption("-g|--consumer-group")]
         [DefaultValue(typeof(string), EventHubConsumerClient.DefaultConsumerGroupName)]
-        public string ConsumerGroup { get; set; }
+        public string ConsumerGroup { get; set; } = null!;
+
+        [Description("Only messages which contain all strings will be printed.")]
+        [CommandOption("-c|--contains")]
+        public string[] Contains { get; set; } = Array.Empty<string>();
+        
+        [Description("Messages containing any of these strings will NOT be printed.")]
+        [CommandOption("-n|--not-contains")]
+        public string[] NotContains { get; set; } = Array.Empty<string>();
     }
 }
