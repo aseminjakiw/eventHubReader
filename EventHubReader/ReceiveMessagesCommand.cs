@@ -125,14 +125,14 @@ namespace EventHubReader
 
                         var message = Encoding.UTF8.GetString(receivedEvent.Data.EventBody);
                         if (settings.NotContains
-                            .Select(x => message.Contains(x))
+                            .Select(x => message.Contains(x, StringComparison.InvariantCultureIgnoreCase))
                             .Any(x=> x == true))
                         {
                             continue;
                         }
 
                         if (settings.Contains
-                            .Select(x => message.Contains(x))
+                            .Select(x => message.Contains(x, StringComparison.InvariantCultureIgnoreCase))
                             .Any(x=> x == false))
                         {
                             continue;
