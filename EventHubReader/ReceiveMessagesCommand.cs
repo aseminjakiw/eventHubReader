@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -17,8 +18,6 @@ namespace EventHubReader
 
         public override async Task<int> ExecuteAsync(CommandContext context, ReceiveMessagesSettings settings)
         {
-            AnsiConsole.Clear();
-
             InitSettings(settings);
 
             AnsiConsole.WriteLine();
@@ -63,6 +62,11 @@ namespace EventHubReader
             table.AddRow("Event Hub", connectionStringProperties.EventHubName);
             table.AddRow("consumer group", settings.ConsumerGroup);
 
+            if (settings.Filename != null)
+            {
+                table.AddRow("Write to file", settings.Filename);
+            }
+
             foreach (var contains in settings.Contains)
             {
                 table.AddRow("Message must contain", contains);
@@ -102,37 +106,57 @@ namespace EventHubReader
 
         private async Task ReceiveMessages(ReceiveMessagesSettings settings, CancellationToken cancellationToken)
         {
-            await using var consumer = new EventHubConsumerClient(settings.ConsumerGroup, settings.ConnectionString);
-            await foreach (var receivedEvent in consumer.ReadEventsAsync(false, null, cancellationToken))
-                try
+            FileStream? fileStream = null;
+            StreamWriter? streamWriter = null;
+            try
+            {
+                if (settings.Filename != null)
                 {
-                    if (!printMessages)
-                        continue;
-
-                    var message = Encoding.UTF8.GetString(receivedEvent.Data.EventBody);
-                    if (settings.NotContains
-                        .Select(x => message.Contains(x))
-                        .Any(x=> x == true))
-                    {
-                        continue;
-                    }
-
-                    if (settings.Contains
-                        .Select(x => message.Contains(x))
-                        .Any(x=> x == false))
-                    {
-                        continue;
-                    }
-
-
-                    var timeStamp = $"[gray]{DateTime.Now:O}:[/] ";
-                    AnsiConsole.MarkupLine(timeStamp);
-                    AnsiConsole.WriteLine(message);
+                    fileStream = File.Open(settings.Filename, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read);
+                    streamWriter = new StreamWriter(fileStream);
                 }
-                catch (Exception e)
-                {
-                    Console.WriteLine(e);
-                }
+            
+                await using var consumer = new EventHubConsumerClient(settings.ConsumerGroup, settings.ConnectionString);
+                await foreach (var receivedEvent in consumer.ReadEventsAsync(false, null, cancellationToken))
+                    try
+                    {
+                        if (!printMessages)
+                            continue;
+
+                        var message = Encoding.UTF8.GetString(receivedEvent.Data.EventBody);
+                        if (settings.NotContains
+                            .Select(x => message.Contains(x))
+                            .Any(x=> x == true))
+                        {
+                            continue;
+                        }
+
+                        if (settings.Contains
+                            .Select(x => message.Contains(x))
+                            .Any(x=> x == false))
+                        {
+                            continue;
+                        }
+
+
+                        var timestamp = DateTime.Now;
+                        var consoleTimestamp = $"[gray]{timestamp:O}:[/] ";
+                        AnsiConsole.MarkupLine(consoleTimestamp);
+                        AnsiConsole.WriteLine(message);
+                    
+                        
+                        streamWriter?.WriteLine($"{timestamp:O}: {message}");
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine(e);
+                    }
+            }
+            finally
+            {
+                streamWriter?.Dispose();
+                fileStream?.Dispose();
+            }
         }
 
         private async Task RunCommand(ReceiveMessagesSettings settings)

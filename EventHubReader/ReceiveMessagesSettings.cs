@@ -24,5 +24,9 @@ namespace EventHubReader
         [Description("Messages containing this string will not be printed. Can be added multiple times")]
         [CommandOption("-n|--not-contains")]
         public string[] NotContains { get; set; } = Array.Empty<string>();
+        
+        [Description("Writes output to file")]
+        [CommandOption("-f|--file")]
+        public string? Filename { get; set; }
     }
 }
