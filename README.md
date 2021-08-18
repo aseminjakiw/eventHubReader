@@ -40,20 +40,20 @@ OPTIONS:
 
 ### Examples
 
-####Use specific consumer group
+1. Use specific consumer group
 ```powershell
 > .\EventHubReader.exe "some connection string" --consumer-group "my-fancy-consumer-group"
 ```
 
-####Print all messages containing `apple` and `house` but not `banana`
+2. Print all messages containing `apple` and `house` but not `banana`
 ```powershell
 > .\EventHubReader.exe "some connection string" --contains "apple" --contains "house" --not-contains "banana"
 ```
 
-####Write all messages additionally to file `message.txt`
+3. Write all messages additionally to file `message.txt`
 ```powershell
 > .\EventHubReader.exe "some connection string" --file "message.txt"
 ```
 
 ## Thanks
-This repo is heavily inspired by [Peter-B](https://github.com/Peter-B-) and his [IoT hub client](https://github.com/Peter-B-/iot-hub-client).
+This repo is heavily inspired by [Peter-B](https://github.com/Peter-B-) and his [IoT hub client](https://github.com/Peter-B-/iot-hub-client). Thank you.
